@@ -10,7 +10,12 @@
 #include <algorithm>
 #include <iterator>
 
-serial::Serial my_serial; 
+
+std::vector<int> commands_list; 
+int command_buffer = 100;
+int receiving_index = 0;
+int executing_index = 0;
+serial::Serial my_serial;
 
 void initSerial()
 {
@@ -37,44 +42,49 @@ bool openSerial()
 	return my_serial.isOpen();
 } 
 
+
+void callback(const sensor_msgs::JointState::ConstPtr& data)
+{
+	commands_list[receiving_index] = data.data;
+    ROS_INFO("I heard %s", commands_list[receiving_index]);
+	receiving_index = (receiving_index + 1) % command_buffer;
+	if (open_serial())
+	{
+           	status_pub.publish("driver 1");
+        	ROS_INFO("command :" + data.data + " written to port");
+	        ser.write(data.data);
+	}
+
+}
+
+
+void init_command_buffer(int size)
+{
+	int count = commands_list.size();
+	if (count == size)
+		return;
+
+	for (int i = 0; i < (size-count); i++)
+	{
+		commands_list.push_back("");
+	}
+
+}
+
+
+void executer()
+{
+	rospy.init_node("commad_executer", anonymous=True);
+    rospy.Subscriber("command", String, callback);
+    rospy.spin();
+}
+
+
 int main(int argc, char **argv)
 {
-  	ros::init(argc, argv, "driver_obstacle");
+	ros::init(argc, argv, "driver_obstacle");
   	ros::NodeHandle n;
- 	ros::Publisher chatter_pub = n.advertise<std_msgs::String>("driver_obstacle", 1000);
-
- 	initSerial(); 
- 	ROS_INFO("start driver obstacle");
-
- 	while (ros::ok())
- 	{
-		ROS_INFO("start loop");
-		if(openSerial() == false)
-			ROS_INFO("Serial port is not connected, trying to open agin...");
-			usleep(100000);
-			continue; 
-		std_msgs::String msg;
-    	std::string result; 
-		
-		try
-		{
-   	 		size_t n_size = my_serial.readline(result);
-   	 	} 
-   	 	catch (serial::SerialException ex)
-   	 	{
-   	 		ROS_INFO("reconnect driver serial port: %s",ex.what());
-   	 		continue;
-   	 	}
-		std::stringstream ss(result);
-		
-		msg.data = result ;
-		ROS_INFO("string: %s", msg.data.c_str());
-		chatter_pub.publish(msg);
-
-    	ros::spinOnce();
-
-    		//loop_rate.sleep();
-		ROS_INFO("End loop");
-  	}
-  	return 0;
+  	ros::Publisher status_pub = n.advertise<std_msgs::String>("status", 100);
+	init_command_buffer(command_buffer);
+	executer();
 }
