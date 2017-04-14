@@ -23,7 +23,7 @@ void initSerial()
  	serial::Timeout::simpleTimeout(1000);
  	serial::Timeout timeout	= serial::Timeout::simpleTimeout(1000);
  	my_serial.setTimeout(timeout);
- 	my_serial.setBaudrate (9600);
+ 	my_serial.setBaudrate (115200);
 }
 
 bool openSerial()
@@ -39,52 +39,35 @@ bool openSerial()
  		ROS_INFO("open fail : ex.what()");
  	}
 	
+
 	return my_serial.isOpen();
 } 
 
 
-void callback(const sensor_msgs::JointState::ConstPtr& data)
+void commandCallback(const std_msgs::String::ConstPtr& msg)
 {
-	commands_list[receiving_index] = data.data;
-    ROS_INFO("I heard %s", commands_list[receiving_index]);
-	receiving_index = (receiving_index + 1) % command_buffer;
-	if (open_serial())
-	{
-           	status_pub.publish("driver 1");
-        	ROS_INFO("command :" + data.data + " written to port");
-	        ser.write(data.data);
-	}
-
+  ROS_INFO("I heard: [%s]", msg->data.c_str());
+  if (openSerial())
+  {
+	unsigned char * ptr = (unsigned char *)msg->data.c_str();
+  	my_serial.write(ptr, msg->data.size());	
+  }
 }
 
 
-void init_command_buffer(int size)
-{
-	int count = commands_list.size();
-	if (count == size)
-		return;
-
-	for (int i = 0; i < (size-count); i++)
-	{
-		commands_list.push_back("");
-	}
-
-}
-
-
-void executer()
+/*void executer()
 {
 	rospy.init_node("commad_executer", anonymous=True);
     rospy.Subscriber("command", String, callback);
     rospy.spin();
-}
+}*/
 
 
 int main(int argc, char **argv)
 {
-	ros::init(argc, argv, "driver_obstacle");
+	ros::init(argc, argv, "commad_executer");
   	ros::NodeHandle n;
-  	ros::Publisher status_pub = n.advertise<std_msgs::String>("status", 100);
-	init_command_buffer(command_buffer);
-	executer();
+  	ros::Subscriber sub = n.subscribe("command", 1000, commandCallback);
+  	ros::spin();
+  	return 0; 
 }
